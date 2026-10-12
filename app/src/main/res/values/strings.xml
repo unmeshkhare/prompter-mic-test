@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_description">Does nothing on screen. Only lets the teleprompter keep hearing your voice while the camera app is recording. It never reads your screen or content.</string>
+</resources>

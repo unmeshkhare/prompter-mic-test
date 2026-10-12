@@ -30,6 +30,13 @@ class MainActivity : Activity() {
 
     private fun hasOverlay() = Settings.canDrawOverlays(this)
 
+    private fun hasA11y(): Boolean {
+        val s = Settings.Secure.getString(
+            contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return s.contains("$packageName/")
+    }
+
     private fun makeButton(label: String, onClick: () -> Unit): Button {
         val b = Button(this)
         b.text = label
@@ -60,7 +67,7 @@ class MainActivity : Activity() {
         intro.text =
             "This little app answers one question: can a floating box keep hearing you " +
                 "(offline, English) while your camera app is recording video?\n\n" +
-                "1. Give the three permissions below.\n" +
+                "1. Give the permissions below (including step 4, the accessibility service).\n" +
                 "2. Tap START. Wait until the floating box says the model is ready, then talk. " +
                 "You should see your words appear.\n" +
                 "3. Press Home, open your camera app, switch to VIDEO, press record and keep talking.\n" +
@@ -91,6 +98,9 @@ class MainActivity : Activity() {
                     Uri.parse("package:$packageName")
                 )
             )
+        })
+        col.addView(makeButton("4. Turn on accessibility service (the mic fix to test)") {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         })
         col.addView(makeButton("START test overlay") { startTest() })
         col.addView(makeButton("Stop") {
@@ -134,7 +144,8 @@ class MainActivity : Activity() {
         status.text =
             "Microphone: ${tick(hasMic())}\n" +
                 "Notifications: ${tick(hasNotif())}\n" +
-                "Display over other apps: ${tick(hasOverlay())}"
+                "Display over other apps: ${tick(hasOverlay())}\n" +
+                "Accessibility service: ${tick(hasA11y())}"
     }
 
     private fun startTest() {

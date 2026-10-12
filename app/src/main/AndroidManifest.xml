@@ -26,5 +26,18 @@
             android:name=".OverlayService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".MicPriorityService"
+            android:exported="true"
+            android:label="Prompter mic priority"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>
     </application>
 </manifest>
