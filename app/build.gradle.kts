@@ -11,8 +11,8 @@ android {
         applicationId = "com.graviton.promptertest"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1-mictest"
+        versionCode = 2
+        versionName = "0.2-prompter"
         // Poco M6 and Xiaomi Pad 6 are both arm64; keeps the APK small.
         ndk { abiFilters += listOf("arm64-v8a") }
     }

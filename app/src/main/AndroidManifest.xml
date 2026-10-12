@@ -10,7 +10,7 @@
     <application
         android:allowBackup="false"
         android:icon="@android:drawable/ic_btn_speak_now"
-        android:label="Prompter Mic Test"
+        android:label="Voice Prompter"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
@@ -21,6 +21,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".EditorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
 
         <service
             android:name=".OverlayService"
