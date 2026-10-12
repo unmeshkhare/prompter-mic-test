@@ -31,6 +31,7 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
     @Volatile var peak = 0
     @Volatile var zeroSince = 0L
     @Volatile var heard = ""
+    @Volatile var lagMs = 0L
 
     @Volatile private var running = false
     private var thread: Thread? = null
@@ -74,6 +75,7 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
         zeroSince = 0L
         peak = 0
         rms = 0.0
+        lagMs = 0L
 
         val minBuf = AudioRecord.getMinBufferSize(
             SR, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -95,6 +97,10 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
 
         running = true
         val t = Thread {
+            try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+            } catch (ignored: Exception) {
+            }
             var recognizer: Recognizer? = null
             try {
                 val rcg: Recognizer = if (grammarWords != null && grammarWords.isNotEmpty()) {
@@ -109,6 +115,8 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
                 rec.startRecording()
                 val buf = ShortArray(1600) // 100 ms
                 var lastPartial = ""
+                val wall0 = SystemClock.elapsedRealtime()
+                var samplesDone = 0L
                 while (running) {
                     val n = rec.read(buf, 0, buf.size)
                     if (n <= 0) {
@@ -118,6 +126,7 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
                         }
                         continue
                     }
+                    samplesDone += n
                     var p = 0
                     var sum = 0.0
                     for (i in 0 until n) {
@@ -150,6 +159,8 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
                             }
                         }
                     }
+                    // how far processing is behind real time (0 = keeping up)
+                    lagMs = max(0L, (SystemClock.elapsedRealtime() - wall0) - samplesDone * 1000L / SR)
                 }
             } catch (e: Exception) {
                 audioError = "Audio error: ${e.message}"

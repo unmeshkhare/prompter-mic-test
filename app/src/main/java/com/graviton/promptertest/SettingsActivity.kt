@@ -42,6 +42,8 @@ class SettingsActivity : Activity() {
         addSeek("Text size", 14, 80, prefs.fontSp, " sp") { prefs.fontSp = it }
         addSeek("Reading line position (from top)", 10, 70, prefs.readingLine, " %") { prefs.readingLine = it }
         addSeek("Window background opacity", 0, 100, prefs.opacity, " %") { prefs.opacity = it }
+        addSeek("Look-ahead: highlight runs this many words ahead", 0, 12, prefs.lead, " words") { prefs.lead = it }
+        col.addView(note("Raise this if the highlight lags behind your voice, lower it if it jumps ahead."))
 
         addSpinner(
             "Theme", Themes.all.map { it.label },
@@ -59,7 +61,7 @@ class SettingsActivity : Activity() {
         ) { prefs.micIdx = it }
 
         addCheck(
-            "Script-aware recognition (beta): steer the recogniser towards words in your script",
+            "Script-aware recognition (recommended): the recogniser favours words from your script. Turn off if you often ad-lib.",
             prefs.scriptAware
         ) { prefs.scriptAware = it }
         addCheck("Show what I hear in the prompter's top bar", prefs.showHeard) { prefs.showHeard = it }

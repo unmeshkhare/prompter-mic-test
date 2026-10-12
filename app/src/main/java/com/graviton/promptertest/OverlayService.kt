@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -54,6 +55,7 @@ class OverlayService : Service() {
     private lateinit var btnPlay: TextView
     private lateinit var controls: LinearLayout
     private lateinit var tvHide: TextView
+    private lateinit var content: FrameLayout
     private var rootView: FrameLayout? = null
 
     private val main = Handler(Looper.getMainLooper())
@@ -62,14 +64,24 @@ class OverlayService : Service() {
     private var parsed: ScriptParser.Parsed? = null
     @Volatile private var aligner: Aligner? = null
     private var following = false
+
+    // curPos = what the highlight shows; alignPos = what the matcher believes; curPos = alignPos + lead
     private var curPos = 0
     @Volatile private var lastAlignedPos = 0
+    @Volatile private var lead = 2
+
+    // window state
+    private var rot = 0          // text rotation in degrees: 0, 90, 180, 270
+    private var lastLand = false
 
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         main.post { applyPrefs() }
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun screenW() = resources.displayMetrics.widthPixels
+    private fun screenH() = resources.displayMetrics.heightPixels
+    private fun isLand() = screenW() > screenH()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -115,6 +127,7 @@ class OverlayService : Service() {
         prefs = Prefs(this)
         store = ScriptStore(this)
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        lead = prefs.lead
         buildUi()
         engine = VoiceEngine(this) { text -> onHeard(text) }
         engine.loadModel()
@@ -142,6 +155,17 @@ class OverlayService : Service() {
         return t
     }
 
+    private fun headerButton(label: String, color: Int, onClick: () -> Unit): TextView {
+        val t = TextView(this)
+        t.text = label
+        t.textSize = 12.5f
+        t.typeface = Typeface.DEFAULT_BOLD
+        t.setTextColor(color)
+        t.setPadding(dp(9), dp(8), dp(9), dp(8))
+        t.setOnClickListener { onClick() }
+        return t
+    }
+
     private fun barBackground(): GradientDrawable {
         val g = GradientDrawable()
         g.setColor(Color.argb(225, 20, 22, 30))
@@ -150,6 +174,9 @@ class OverlayService : Service() {
 
     private fun buildUi() {
         val root = FrameLayout(this)
+
+        // everything visible lives in `content`, which is rotated as a whole
+        content = FrameLayout(this)
         val column = LinearLayout(this)
         column.orientation = LinearLayout.VERTICAL
 
@@ -157,7 +184,7 @@ class OverlayService : Service() {
         val header = LinearLayout(this)
         header.orientation = LinearLayout.HORIZONTAL
         header.gravity = Gravity.CENTER_VERTICAL
-        header.setPadding(dp(10), dp(4), dp(4), dp(4))
+        header.setPadding(dp(10), dp(2), dp(2), dp(2))
         header.background = barBackground()
 
         tvStatus = TextView(this)
@@ -168,26 +195,14 @@ class OverlayService : Service() {
         tvStatus.text = "Loading..."
         header.addView(tvStatus, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-        tvHide = TextView(this)
-        tvHide.text = "Hide menu"
-        tvHide.textSize = 12f
-        tvHide.setTextColor(Color.rgb(140, 200, 255))
-        tvHide.setPadding(dp(8), dp(8), dp(8), dp(8))
-        tvHide.setOnClickListener {
+        header.addView(headerButton("Rotate", Color.rgb(255, 214, 120)) { rotateText() })
+        tvHide = headerButton("Hide", Color.rgb(140, 200, 255)) {
             val showing = controls.visibility == View.VISIBLE
             controls.visibility = if (showing) View.GONE else View.VISIBLE
-            tvHide.text = if (showing) "Menu" else "Hide menu"
+            tvHide.text = if (showing) "Menu" else "Hide"
         }
         header.addView(tvHide)
-
-        val close = TextView(this)
-        close.text = "  X  "
-        close.textSize = 16f
-        close.typeface = Typeface.DEFAULT_BOLD
-        close.setTextColor(Color.rgb(255, 130, 130))
-        close.setPadding(dp(8), dp(6), dp(8), dp(6))
-        close.setOnClickListener { stopSelf() }
-        header.addView(close)
+        header.addView(headerButton("X", Color.rgb(255, 130, 130)) { stopSelf() })
         column.addView(header)
 
         // controls
@@ -231,35 +246,24 @@ class OverlayService : Service() {
         view.onWordTap = { idx -> jump(idx) }
         column.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        root.addView(
+        content.addView(
             column,
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         )
+        root.addView(content, FrameLayout.LayoutParams(dp(300), dp(300), Gravity.CENTER))
 
-        // resize grip, bottom-right
+        // resize grip: always the bottom-right corner of the screen window
         val grip = TextView(this)
         grip.text = "◢"
         grip.textSize = 22f
         grip.gravity = Gravity.CENTER
-        grip.setTextColor(Color.argb(200, 255, 255, 255))
+        grip.setTextColor(Color.argb(210, 255, 255, 255))
         val gl = FrameLayout.LayoutParams(dp(40), dp(40))
         gl.gravity = Gravity.END or Gravity.BOTTOM
         root.addView(grip, gl)
 
-        val dm = resources.displayMetrics
-        val sw = dm.widthPixels
-        val sh = dm.heightPixels
-        var w = if (prefs.winW > 0) prefs.winW else min((sw * 0.94).toInt(), dp(460))
-        var h = if (prefs.winH > 0) prefs.winH else min((sh * 0.36).toInt(), dp(380))
-        w = w.coerceIn(dp(220), sw)
-        h = h.coerceIn(dp(150), sh)
-        var x = if (prefs.winX >= 0) prefs.winX else (sw - w) / 2
-        var y = if (prefs.winY >= 0) prefs.winY else dp(36)
-        x = x.coerceIn(0, max(0, sw - w))
-        y = y.coerceIn(0, max(0, sh - dp(60)))
-
         lp = WindowManager.LayoutParams(
-            w, h,
+            dp(300), dp(300),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
@@ -267,8 +271,8 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT
         )
         lp.gravity = Gravity.TOP or Gravity.START
-        lp.x = x
-        lp.y = y
+        lastLand = isLand()
+        loadGeometry()
 
         header.setOnTouchListener(object : View.OnTouchListener {
             var sx = 0
@@ -281,15 +285,12 @@ class OverlayService : Service() {
                         sx = lp.x; sy = lp.y; tx = e.rawX; ty = e.rawY
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        val m = resources.displayMetrics
-                        lp.x = (sx + (e.rawX - tx).toInt()).coerceIn(0, max(0, m.widthPixels - dp(80)))
-                        lp.y = (sy + (e.rawY - ty).toInt()).coerceIn(0, max(0, m.heightPixels - dp(60)))
+                        lp.x = sx + (e.rawX - tx).toInt()
+                        lp.y = sy + (e.rawY - ty).toInt()
+                        clampPosition()
                         wm.updateViewLayout(root, lp)
                     }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        prefs.winX = lp.x
-                        prefs.winY = lp.y
-                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> saveGeometry()
                 }
                 return true
             }
@@ -306,15 +307,14 @@ class OverlayService : Service() {
                         sw0 = lp.width; sh0 = lp.height; tx = e.rawX; ty = e.rawY
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        val m = resources.displayMetrics
-                        lp.width = (sw0 + (e.rawX - tx).toInt()).coerceIn(dp(220), m.widthPixels)
-                        lp.height = (sh0 + (e.rawY - ty).toInt()).coerceIn(dp(150), m.heightPixels)
+                        lp.width = sw0 + (e.rawX - tx).toInt()
+                        lp.height = sh0 + (e.rawY - ty).toInt()
+                        clampSize()
+                        clampPosition()
+                        applyContentSize()
                         wm.updateViewLayout(root, lp)
                     }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        prefs.winW = lp.width
-                        prefs.winH = lp.height
-                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> saveGeometry()
                 }
                 return true
             }
@@ -324,10 +324,103 @@ class OverlayService : Service() {
         rootView = root
     }
 
+    // ------------------------------------------------------------------ geometry + rotation
+
+    private fun defaultGeo(land: Boolean): IntArray {
+        val sw = screenW()
+        val sh = screenH()
+        return if (!land) {
+            intArrayOf(-1, dp(36), min((sw * 0.94).toInt(), dp(460)), min((sh * 0.36).toInt(), dp(380)))
+        } else {
+            intArrayOf(-1, dp(12), min((sw * 0.62).toInt(), dp(660)), min((sh * 0.5).toInt(), dp(300)))
+        }
+    }
+
+    /** Window size limits in screen coordinates (text area stays usable when rotated 90/270). */
+    private fun clampSize() {
+        val vertical = rot % 180 != 0
+        val minW = if (vertical) dp(150) else dp(230)
+        val minH = if (vertical) dp(230) else dp(150)
+        lp.width = lp.width.coerceIn(minW, max(minW, screenW()))
+        lp.height = lp.height.coerceIn(minH, max(minH, screenH()))
+    }
+
+    private fun clampPosition() {
+        lp.x = lp.x.coerceIn(0, max(0, screenW() - lp.width))
+        lp.y = lp.y.coerceIn(0, max(0, screenH() - lp.height))
+    }
+
+    /** The content view is laid out un-rotated (swapped dimensions for 90/270) and then rotated to fit the window. */
+    private fun applyContentSize() {
+        val vertical = rot % 180 != 0
+        val cw = if (vertical) lp.height else lp.width
+        val ch = if (vertical) lp.width else lp.height
+        content.layoutParams = FrameLayout.LayoutParams(cw, ch, Gravity.CENTER)
+        content.rotation = rot.toFloat()
+    }
+
+    private fun loadGeometry() {
+        val land = isLand()
+        val g = prefs.getGeo(land) ?: defaultGeo(land)
+        rot = prefs.getRot(land)
+        lp.width = g[2]
+        lp.height = g[3]
+        clampSize()
+        lp.x = if (g[0] >= 0) g[0] else (screenW() - lp.width) / 2
+        lp.y = g[1]
+        clampPosition()
+        applyContentSize()
+    }
+
+    private fun saveGeometry() {
+        val land = isLand()
+        prefs.setGeo(land, lp.x, lp.y, lp.width, lp.height)
+        prefs.setRot(land, rot)
+    }
+
+    private fun rotateText() {
+        val root = rootView ?: return
+        rot = (rot + 90) % 360
+        val w0 = lp.width
+        lp.width = lp.height
+        lp.height = w0
+        clampSize()
+        clampPosition()
+        applyContentSize()
+        wm.updateViewLayout(root, lp)
+        saveGeometry()
+    }
+
+    /** Called when the screen turns (by the system callback, and by a safety check every 250 ms). */
+    private fun checkOrientation() {
+        val root = rootView ?: return
+        val land = isLand()
+        if (land == lastLand) return
+        lastLand = land
+        loadGeometry()
+        wm.updateViewLayout(root, lp)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        checkOrientation()
+    }
+
+    // ------------------------------------------------------------------ prefs
+
     private fun applyPrefs() {
         view.setStyle(
             Themes.get(prefs.theme), prefs.highlight, prefs.fontSp, prefs.readingLine, prefs.opacity
         )
+        val newLead = prefs.lead
+        if (newLead != lead) {
+            lead = newLead
+            val ps = parsed
+            if (ps != null) {
+                curPos = min(ps.n(), lastAlignedPos + lead)
+                view.setPos(curPos)
+            }
+        }
     }
 
     // ------------------------------------------------------------------ script + following
@@ -347,13 +440,15 @@ class OverlayService : Service() {
         }
     }
 
-    private fun jump(p: Int) {
+    /** Jump the highlight to word idx (button or tap). The matcher is told the matching "heard" position. */
+    private fun jump(idx: Int) {
         val ps = parsed ?: return
-        val np = p.coerceIn(0, ps.n())
-        curPos = np
-        lastAlignedPos = np
-        view.setPos(np)
-        alignExec.execute { aligner?.setPos(np) }
+        val shown = idx.coerceIn(0, ps.n())
+        val heard = max(0, shown - lead)
+        curPos = shown
+        lastAlignedPos = heard
+        view.setPos(shown)
+        alignExec.execute { aligner?.setPos(heard) }
     }
 
     private fun setFollowing(on: Boolean) {
@@ -394,7 +489,7 @@ class OverlayService : Service() {
     /** Called on the audio thread with the words heard in the current phrase. */
     private fun onHeard(text: String) {
         if (!following) return
-        val tokens = TextProc.tokenize(text)
+        val tokens = TextProc.tokenize(text).filter { it != "unk" }
         if (tokens.isEmpty()) return
         alignExec.execute {
             val al = aligner ?: return@execute
@@ -403,8 +498,9 @@ class OverlayService : Service() {
                 lastAlignedPos = r.pos
                 val p = r.pos
                 main.post {
-                    curPos = p
-                    view.setPos(p)
+                    val n = parsed?.n() ?: 0
+                    curPos = min(n, p + lead)
+                    view.setPos(curPos)
                 }
             }
         }
@@ -412,6 +508,7 @@ class OverlayService : Service() {
 
     private val statusTick = object : Runnable {
         override fun run() {
+            checkOrientation()
             val now = SystemClock.elapsedRealtime()
             val err = engine.loadError ?: engine.audioError
             val text: String
@@ -426,25 +523,16 @@ class OverlayService : Service() {
                 }
                 else -> {
                     val heard = engine.heard
-                    text = if (prefs.showHeard && heard.isNotBlank()) "Listening: $heard" else "Listening..."
-                    color = Color.rgb(120, 230, 140)
+                    val lag = engine.lagMs
+                    val slow = if (lag > 700) "SLOW ${lag / 100 / 10.0}s  " else ""
+                    text = slow + (if (prefs.showHeard && heard.isNotBlank()) "Listening: $heard" else "Listening...")
+                    color = if (lag > 700) Color.rgb(255, 200, 90) else Color.rgb(120, 230, 140)
                 }
             }
             tvStatus.text = text
             tvStatus.setTextColor(color)
             main.postDelayed(this, 250)
         }
-    }
-
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        super.onConfigurationChanged(newConfig)
-        val root = rootView ?: return
-        val m = resources.displayMetrics
-        lp.width = min(lp.width, m.widthPixels)
-        lp.height = min(lp.height, m.heightPixels)
-        lp.x = lp.x.coerceIn(0, max(0, m.widthPixels - lp.width))
-        lp.y = lp.y.coerceIn(0, max(0, m.heightPixels - dp(60)))
-        wm.updateViewLayout(root, lp)
     }
 
     override fun onDestroy() {

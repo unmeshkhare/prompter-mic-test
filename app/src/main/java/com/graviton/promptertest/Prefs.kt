@@ -35,31 +35,51 @@ class Prefs(context: Context) {
         set(v) { sp.edit().putInt("mic_idx", v).apply() }
 
     var scriptAware: Boolean
-        get() = sp.getBoolean("script_aware", false)
+        get() = sp.getBoolean("script_aware", true)
         set(v) { sp.edit().putBoolean("script_aware", v).apply() }
 
     var showHeard: Boolean
         get() = sp.getBoolean("show_heard", true)
         set(v) { sp.edit().putBoolean("show_heard", v).apply() }
 
-    var winX: Int
-        get() = sp.getInt("win_x", -1)
-        set(v) { sp.edit().putInt("win_x", v).apply() }
-    var winY: Int
-        get() = sp.getInt("win_y", -1)
-        set(v) { sp.edit().putInt("win_y", v).apply() }
-    var winW: Int
-        get() = sp.getInt("win_w", -1)
-        set(v) { sp.edit().putInt("win_w", v).apply() }
-    var winH: Int
-        get() = sp.getInt("win_h", -1)
-        set(v) { sp.edit().putInt("win_h", v).apply() }
+    /** How many words the highlight runs ahead of what the recogniser has matched (hides recogniser delay). */
+    var lead: Int
+        get() = sp.getInt("lead", 2)
+        set(v) { sp.edit().putInt("lead", v).apply() }
+
+    /** Window geometry per screen orientation: x, y, width, height (null = never saved). */
+    fun getGeo(land: Boolean): IntArray? {
+        val k = if (land) "l" else "p"
+        if (!sp.contains("geo_${k}_w")) return null
+        return intArrayOf(
+            sp.getInt("geo_${k}_x", -1), sp.getInt("geo_${k}_y", 0),
+            sp.getInt("geo_${k}_w", 0), sp.getInt("geo_${k}_h", 0)
+        )
+    }
+
+    fun setGeo(land: Boolean, x: Int, y: Int, w: Int, h: Int) {
+        val k = if (land) "l" else "p"
+        sp.edit().putInt("geo_${k}_x", x).putInt("geo_${k}_y", y)
+            .putInt("geo_${k}_w", w).putInt("geo_${k}_h", h).apply()
+    }
+
+    /** Text rotation in degrees (0/90/180/270), remembered per screen orientation. */
+    fun getRot(land: Boolean): Int = sp.getInt(if (land) "rot_l" else "rot_p", 0)
+
+    fun setRot(land: Boolean, r: Int) {
+        sp.edit().putInt(if (land) "rot_l" else "rot_p", r).apply()
+    }
 
     var lastScript: String
         get() = sp.getString("last_script", "") ?: ""
         set(v) { sp.edit().putString("last_script", v).apply() }
 
     fun resetWindow() {
-        sp.edit().remove("win_x").remove("win_y").remove("win_w").remove("win_h").apply()
+        val e = sp.edit()
+        for (k in listOf("p", "l")) {
+            e.remove("geo_${k}_x").remove("geo_${k}_y").remove("geo_${k}_w").remove("geo_${k}_h")
+            e.remove("rot_$k")
+        }
+        e.apply()
     }
 }
