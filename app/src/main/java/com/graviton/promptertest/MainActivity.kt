@@ -3,12 +3,17 @@ package com.graviton.promptertest
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.Gravity
 import android.view.ViewGroup
@@ -58,6 +63,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (A11y.state(this) != A11y.OK && A11y.autoFix(this)) {
+            content.postDelayed({ refresh() }, 1800) // show the result once Android has restarted the service
+        }
         refresh()
     }
 
@@ -80,9 +88,26 @@ class MainActivity : Activity() {
         setupRow("Display over other apps (floating window)", Launcher.hasOverlay(this), "Allow") {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
-        setupRow("Accessibility service: keeps the mic alive while the camera records", Launcher.hasA11y(this), "Turn on") {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        when (A11y.state(this)) {
+            A11y.OK -> setupRow("Accessibility service (keeps the mic alive while the camera records)", true, "") {}
+            A11y.OFF -> setupRow("Accessibility service: keeps the mic alive while the camera records", false, "Turn on") {
+                A11y.openSettings(this)
+            }
+            else -> setupRow(
+                "Accessibility service is switched on but Android has stopped it. Switch 'Prompter mic priority' off and on again.",
+                false, "Open"
+            ) { A11y.openSettings(this) }
         }
+        if (A11y.canWriteSecure(this)) {
+            content.addView(label("Auto-fix is ACTIVE: the app switches accessibility back on by itself.", 13f, false, Color.rgb(30, 130, 70)))
+        } else {
+            setupInfo("Optional: let the app fix accessibility by itself (one-time, needs a PC)", "Steps") { showAutoFixSteps() }
+        }
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        setupRow("Battery: no restrictions (stops Android killing the app)", pm.isIgnoringBatteryOptimizations(packageName), "Allow") {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+        }
+        setupInfo("Xiaomi: turn on Autostart for this app and lock it in the Recents screen", "Open") { openAutostart() }
         if (Build.VERSION.SDK_INT >= 33) {
             val ok = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -129,6 +154,51 @@ class MainActivity : Activity() {
         row.addView(t, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         if (!ok) row.addView(button(action, onClick))
         content.addView(row)
+    }
+
+    private fun setupInfo(text: String, action: String, onClick: () -> Unit) {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.addView(label(text, 13f, false, Color.rgb(90, 95, 110)), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(button(action, onClick))
+        content.addView(row)
+    }
+
+    private val adbCommand = "adb shell pm grant com.graviton.promptertest android.permission.WRITE_SECURE_SETTINGS"
+
+    private fun showAutoFixSteps() {
+        AlertDialog.Builder(this)
+            .setTitle("Make accessibility fix itself")
+            .setMessage(
+                "Do this once. Afterwards the app switches the accessibility service back on whenever Android turns it off.\n\n" +
+                    "1. Phone: Settings > About phone > tap the OS version 7 times.\n" +
+                    "2. Settings > Additional settings > Developer options: turn on USB debugging. " +
+                    "On Xiaomi also turn on \"USB debugging (Security settings)\" (needs your Mi account).\n" +
+                    "3. Connect the phone to your PC and allow the debugging prompt.\n" +
+                    "4. On the PC, in a terminal with adb installed, run:\n\n" + adbCommand
+            )
+            .setPositiveButton("Copy command") { _, _ ->
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("adb", adbCommand))
+                Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun openAutostart() {
+        try {
+            val i = Intent()
+            i.component = ComponentName(
+                "com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"
+            )
+            startActivity(i)
+        } catch (e: Exception) {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+            )
+        }
     }
 
     private fun addScriptRow(s: ScriptDoc) {

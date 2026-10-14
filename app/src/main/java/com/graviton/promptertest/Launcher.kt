@@ -14,12 +14,7 @@ object Launcher {
 
     fun hasOverlay(c: Context) = Settings.canDrawOverlays(c)
 
-    fun hasA11y(c: Context): Boolean {
-        val s = Settings.Secure.getString(
-            c.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-        return s.contains(c.packageName + "/")
-    }
+    fun hasA11y(c: Context): Boolean = A11y.state(c) == A11y.OK
 
     /** Starts the floating prompter for a script. Returns false if setup is incomplete. */
     fun startPrompter(a: Activity, id: String): Boolean {
@@ -32,8 +27,10 @@ object Launcher {
             return false
         }
         if (!hasA11y(a)) {
+            A11y.autoFix(a)
             Toast.makeText(
-                a, "Accessibility service is off: the camera app may mute the microphone.",
+                a, "Accessibility service is not running: the camera app may mute the microphone. " +
+                    "The prompter's top bar will show how to fix it.",
                 Toast.LENGTH_LONG
             ).show()
         }

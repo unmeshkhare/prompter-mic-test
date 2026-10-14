@@ -155,14 +155,25 @@ class OverlayService : Service() {
         return t
     }
 
-    private fun headerButton(label: String, color: Int, onClick: () -> Unit): TextView {
+    /** Big, easy-to-hit button for the top bar. */
+    private fun pill(label: String, fill: Int, textColor: Int, minWidthDp: Int, onClick: () -> Unit): TextView {
         val t = TextView(this)
         t.text = label
-        t.textSize = 12.5f
+        t.textSize = 15f
         t.typeface = Typeface.DEFAULT_BOLD
-        t.setTextColor(color)
-        t.setPadding(dp(9), dp(8), dp(9), dp(8))
+        t.setTextColor(textColor)
+        t.gravity = Gravity.CENTER
+        t.minHeight = dp(46)
+        t.minWidth = dp(minWidthDp)
+        t.setPadding(dp(14), 0, dp(14), 0)
+        val bg = GradientDrawable()
+        bg.setColor(fill)
+        bg.cornerRadius = dp(12).toFloat()
+        t.background = bg
         t.setOnClickListener { onClick() }
+        val l = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        l.setMargins(dp(4), dp(2), dp(4), dp(2))
+        t.layoutParams = l
         return t
     }
 
@@ -180,29 +191,39 @@ class OverlayService : Service() {
         val column = LinearLayout(this)
         column.orientation = LinearLayout.VERTICAL
 
-        // header = drag handle
+        // header = drag handle: a row of big buttons, then a status line
         val header = LinearLayout(this)
-        header.orientation = LinearLayout.HORIZONTAL
-        header.gravity = Gravity.CENTER_VERTICAL
-        header.setPadding(dp(10), dp(2), dp(2), dp(2))
+        header.orientation = LinearLayout.VERTICAL
+        header.setPadding(dp(8), dp(4), dp(8), dp(4))
         header.background = barBackground()
 
-        tvStatus = TextView(this)
-        tvStatus.textSize = 12f
-        tvStatus.setTextColor(Color.WHITE)
-        tvStatus.maxLines = 1
-        tvStatus.ellipsize = TextUtils.TruncateAt.END
-        tvStatus.text = "Loading..."
-        header.addView(tvStatus, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-
-        header.addView(headerButton("Rotate", Color.rgb(255, 214, 120)) { rotateText() })
-        tvHide = headerButton("Hide", Color.rgb(140, 200, 255)) {
+        val topRow = LinearLayout(this)
+        topRow.orientation = LinearLayout.HORIZONTAL
+        topRow.gravity = Gravity.CENTER_VERTICAL
+        val move = TextView(this)
+        move.text = "\u2261  Move"
+        move.textSize = 14f
+        move.typeface = Typeface.DEFAULT_BOLD
+        move.setTextColor(Color.rgb(170, 178, 205))
+        topRow.addView(move, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        topRow.addView(pill("Rotate", Color.rgb(255, 196, 60), Color.rgb(25, 25, 25), 80) { rotateText() })
+        tvHide = pill("Hide", Color.rgb(74, 110, 170), Color.WHITE, 66) {
             val showing = controls.visibility == View.VISIBLE
             controls.visibility = if (showing) View.GONE else View.VISIBLE
             tvHide.text = if (showing) "Menu" else "Hide"
         }
-        header.addView(tvHide)
-        header.addView(headerButton("X", Color.rgb(255, 130, 130)) { stopSelf() })
+        topRow.addView(tvHide)
+        topRow.addView(pill("Close", Color.rgb(214, 64, 64), Color.WHITE, 80) { stopSelf() })
+        header.addView(topRow)
+
+        tvStatus = TextView(this)
+        tvStatus.textSize = 12.5f
+        tvStatus.setTextColor(Color.WHITE)
+        tvStatus.maxLines = 1
+        tvStatus.ellipsize = TextUtils.TruncateAt.END
+        tvStatus.setPadding(dp(4), dp(2), dp(4), dp(2))
+        tvStatus.text = "Loading..."
+        header.addView(tvStatus)
         column.addView(header)
 
         // controls
@@ -511,11 +532,21 @@ class OverlayService : Service() {
             checkOrientation()
             val now = SystemClock.elapsedRealtime()
             val err = engine.loadError ?: engine.audioError
+            val a11y = A11y.state(this@OverlayService)
+            if (a11y != A11y.OK) A11y.autoFix(this@OverlayService)
             val text: String
             val color: Int
             when {
                 err != null -> { text = err; color = Color.rgb(255, 130, 130) }
                 engine.model == null -> { text = "Loading speech model..."; color = Color.rgb(210, 210, 210) }
+                a11y == A11y.OFF -> {
+                    text = "Accessibility is OFF. Tap here to fix."
+                    color = Color.rgb(255, 170, 70)
+                }
+                a11y == A11y.STALLED -> {
+                    text = "Accessibility stopped. Tap here, switch it off and on."
+                    color = Color.rgb(255, 170, 70)
+                }
                 !following -> { text = "Paused. Tap Start, then read."; color = Color.rgb(210, 210, 210) }
                 engine.zeroSince > 0 && now - engine.zeroSince > 1500 -> {
                     text = "Mic muted by Android. Turn on the accessibility service."
@@ -531,6 +562,12 @@ class OverlayService : Service() {
             }
             tvStatus.text = text
             tvStatus.setTextColor(color)
+            if (a11y != A11y.OK && err == null && engine.model != null) {
+                tvStatus.setOnClickListener { A11y.openSettings(this@OverlayService) }
+            } else if (tvStatus.hasOnClickListeners()) {
+                tvStatus.setOnClickListener(null)
+                tvStatus.isClickable = false
+            }
             main.postDelayed(this, 250)
         }
     }
