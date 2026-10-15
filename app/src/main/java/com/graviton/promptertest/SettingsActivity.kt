@@ -61,7 +61,7 @@ class SettingsActivity : Activity() {
         ) { prefs.micIdx = it }
 
         addCheck(
-            "Script-aware recognition (English scripts, recommended): the recogniser favours words from your script. Turn off if you often ad-lib. Not used for Hindi.",
+            "Script-aware recognition (recommended): the recogniser favours words from your script, which makes it faster and more accurate (English and Hindi). Turn off if you often ad-lib.",
             prefs.scriptAware
         ) { prefs.scriptAware = it }
         addCheck("Show what I hear in the prompter's top bar", prefs.showHeard) { prefs.showHeard = it }

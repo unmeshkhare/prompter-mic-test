@@ -485,14 +485,18 @@ class OverlayService : Service() {
                 Toast.makeText(this, "Open a script first", Toast.LENGTH_SHORT).show()
                 return
             }
-            val grammar: List<String>? = if (prefs.scriptAware && !hindi) {
+            val grammar: List<String>? = if (!prefs.scriptAware) {
+                null
+            } else if (hindi) {
+                engine.hindiGrammar(ps.words.map { it.norm }.toSet(), ps.words.map { it.text })
+            } else {
                 val set = LinkedHashSet<String>()
                 for (w in ps.words) {
                     val n = w.norm
                     if (n.isNotEmpty() && n.all { it in 'a'..'z' || it == '\'' }) set.add(n)
                 }
                 ArrayList(set)
-            } else null
+            }
             val idx = prefs.micIdx.coerceIn(0, MicSources.list.size - 1)
             if (!engine.start(MicSources.list[idx].second, grammar)) {
                 Toast.makeText(this, engine.audioError ?: "Could not start the microphone", Toast.LENGTH_LONG).show()
@@ -512,7 +516,7 @@ class OverlayService : Service() {
     /** Called on the audio thread with the words heard in the current phrase. */
     private fun onHeard(text: String) {
         if (!following) return
-        val tokens = if (hindi) TextProc.tokenizeHi(text) else TextProc.tokenize(text).filter { it != "unk" }
+        val tokens = if (hindi) TextProc.tokenizeHi(text.replace("[unk]", " ")) else TextProc.tokenize(text).filter { it != "unk" }
         if (tokens.isEmpty()) return
         alignExec.execute {
             val al = aligner ?: return@execute

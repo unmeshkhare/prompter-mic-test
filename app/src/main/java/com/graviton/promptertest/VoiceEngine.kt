@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.os.SystemClock
+import com.graviton.promptertest.core.TextProc
 import org.json.JSONArray
 import org.json.JSONObject
 import org.vosk.Model
@@ -26,6 +27,9 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
 
     @Volatile var model: Model? = null
     @Volatile var lang: String = ""
+
+    /** Hindi: sound key -> Devanagari words of the model vocabulary that have that key (shortest first). */
+    @Volatile private var hiIndex: Map<String, List<String>>? = null
     @Volatile var loadError: String? = null
     @Volatile var audioError: String? = null
     @Volatile var rms = 0.0
@@ -54,11 +58,23 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
             StorageService.unpack(
                 context, asset, target,
                 { m: Model ->
-                    if (wanted == lang) {
+                    if (wanted != lang) {
+                        m.close()
+                    } else if (wanted == "hi") {
+                        // read the model's word list once (off the main thread) so the recogniser can be
+                        // steered towards the words of the script, which is what keeps it fast
+                        Thread {
+                            hiIndex = try { buildHindiIndex() } catch (e: Exception) { null }
+                            if (wanted == lang) {
+                                model = m
+                                onModelReady?.invoke()
+                            } else {
+                                m.close()
+                            }
+                        }.start()
+                    } else {
                         model = m
                         onModelReady?.invoke()
-                    } else {
-                        m.close()
                     }
                 },
                 { e: IOException ->
@@ -68,6 +84,33 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
         } catch (e: Exception) {
             loadError = e.message ?: "could not load the speech model"
         }
+    }
+
+    private fun buildHindiIndex(): Map<String, List<String>> {
+        val idx = HashMap<String, ArrayList<String>>()
+        context.assets.open("model-hi/graph/words.txt").bufferedReader(Charsets.UTF_8).use { r ->
+            r.forEachLine { line ->
+                val w = line.split(' ', '\t').firstOrNull() ?: ""
+                if (w.isNotEmpty() && w[0] in '\u0900'..'\u097F') {
+                    val k = TextProc.hiKey(w)
+                    if (k.isNotEmpty()) idx.getOrPut(k) { ArrayList() }.add(w)
+                }
+            }
+        }
+        for (l in idx.values) l.sortBy { it.length }
+        return idx
+    }
+
+    /** Devanagari words to listen for: every model word that sounds like a script word. null = no restriction. */
+    fun hindiGrammar(keys: Collection<String>, scriptWords: Collection<String>): List<String>? {
+        val idx = hiIndex ?: return null
+        val out = LinkedHashSet<String>()
+        for (w in scriptWords) if (w.isNotEmpty() && w[0] in '\u0900'..'\u097F') out.add(w)
+        for (k in keys) {
+            val c = idx[k] ?: continue
+            for (i in 0 until minOf(60, c.size)) out.add(c[i])
+        }
+        return if (out.isEmpty()) null else ArrayList(out)
     }
 
     fun stop() {
@@ -169,7 +212,7 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
                             onText(text)
                         }
                     } else {
-                        val part = JSONObject(rcg.partialResult).optString("partial")
+                        val part = if (lagMs > 400L) lastPartial else JSONObject(rcg.partialResult).optString("partial")
                         if (part != lastPartial) {
                             lastPartial = part
                             if (part.isNotBlank()) {
