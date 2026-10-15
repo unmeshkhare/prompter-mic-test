@@ -95,61 +95,61 @@ public final class TextProc {
     // ------------------------------------------------------------------ Hindi / Hinglish
 
     private static final Set<String> FILLERS_HI = new HashSet<>(Arrays.asList(
-            "हम्म", "उम्म", "अह", "आह"));
+            "\u0939\u092e\u094d\u092e", "\u0909\u092e\u094d\u092e", "\u0905\u0939", "\u0906\u0939"));
 
     private static String devaConsonant(char c) {
         switch (c) {
-            case 'क': return "k";   case 'ख': return "kh";  case 'ग': return "g";
-            case 'घ': return "gh";  case 'ङ': return "n";   case 'च': return "ch";
-            case 'छ': return "chh"; case 'ज': return "j";   case 'झ': return "jh";
-            case 'ञ': return "n";   case 'ट': return "t";   case 'ठ': return "th";
-            case 'ड': return "d";   case 'ढ': return "dh";  case 'ण': return "n";
-            case 'त': return "t";   case 'थ': return "th";  case 'द': return "d";
-            case 'ध': return "dh";  case 'न': return "n";   case 'प': return "p";
-            case 'फ': return "ph";  case 'ब': return "b";   case 'भ': return "bh";
-            case 'म': return "m";   case 'य': return "y";   case 'र': return "r";
-            case 'ल': return "l";   case 'ळ': return "l";   case 'व': return "v";
-            case 'श': return "sh";  case 'ष': return "sh";  case 'स': return "s";
-            case 'ह': return "h";
+            case '\u0915': return "k";   case '\u0916': return "kh";  case '\u0917': return "g";
+            case '\u0918': return "gh";  case '\u0919': return "n";   case '\u091a': return "ch";
+            case '\u091b': return "chh"; case '\u091c': return "j";   case '\u091d': return "jh";
+            case '\u091e': return "n";   case '\u091f': return "t";   case '\u0920': return "th";
+            case '\u0921': return "d";   case '\u0922': return "dh";  case '\u0923': return "n";
+            case '\u0924': return "t";   case '\u0925': return "th";  case '\u0926': return "d";
+            case '\u0927': return "dh";  case '\u0928': return "n";   case '\u092a': return "p";
+            case '\u092b': return "ph";  case '\u092c': return "b";   case '\u092d': return "bh";
+            case '\u092e': return "m";   case '\u092f': return "y";   case '\u0930': return "r";
+            case '\u0932': return "l";   case '\u0933': return "l";   case '\u0935': return "v";
+            case '\u0936': return "sh";  case '\u0937': return "sh";  case '\u0938': return "s";
+            case '\u0939': return "h";
             // precomposed nukta letters
-            case 'क़': return "k";   case 'ख़': return "kh";  case 'ग़': return "g";
-            case 'ज़': return "j";   case 'ड़': return "d";   case 'ढ़': return "d";
-            case 'फ़': return "ph";  case 'य़': return "y";
+            case '\u0958': return "k";   case '\u0959': return "kh";  case '\u095a': return "g";
+            case '\u095b': return "j";   case '\u095c': return "d";   case '\u095d': return "d";
+            case '\u095e': return "ph";  case '\u095f': return "y";
             default: return null;
         }
     }
 
     private static String devaIndependentVowel(char c) {
         switch (c) {
-            case 'ऄ': case 'अ': return "a";
-            case 'आ': return "aa";
-            case 'इ': return "i";   case 'ई': return "ii";
-            case 'उ': return "u";   case 'ऊ': return "uu";
-            case 'ऋ': return "ri";
-            case 'ऍ': case 'ऎ': case 'ए': return "e";
-            case 'ऐ': return "ai";
-            case 'ऑ': case 'ऒ': case 'ओ': return "o";
-            case 'औ': return "au";
+            case '\u0904': case '\u0905': return "a";
+            case '\u0906': return "aa";
+            case '\u0907': return "i";   case '\u0908': return "ii";
+            case '\u0909': return "u";   case '\u090a': return "uu";
+            case '\u090b': return "ri";
+            case '\u090d': case '\u090e': case '\u090f': return "e";
+            case '\u0910': return "ai";
+            case '\u0911': case '\u0912': case '\u0913': return "o";
+            case '\u0914': return "au";
             default: return null;
         }
     }
 
     private static String devaMatra(char c) {
         switch (c) {
-            case 'ा': return "a";   case 'ि': case 'ी': return "i";
-            case 'ु': case 'ू': return "u";
-            case 'ृ': case 'ॄ': return "ri";
-            case 'ॅ': case 'ॆ': case 'े': return "e";
-            case 'ै': return "ai";
-            case 'ॉ': case 'ॊ': case 'ो': return "o";
-            case 'ौ': return "au";
+            case '\u093e': return "a";   case '\u093f': case '\u0940': return "i";
+            case '\u0941': case '\u0942': return "u";
+            case '\u0943': case '\u0944': return "ri";
+            case '\u0945': case '\u0946': case '\u0947': return "e";
+            case '\u0948': return "ai";
+            case '\u0949': case '\u094a': case '\u094b': return "o";
+            case '\u094c': return "au";
             default: return null;
         }
     }
 
     /** Devanagari -> rough Roman letters (other characters pass through). Word-final schwa is dropped. */
     static String devaToRoman(String w) {
-        w = w.replace("ज्ञ", "gy");
+        w = w.replace("\u091c\u094d\u091e", "gy");
         StringBuilder sb = new StringBuilder();
         boolean pend = false; // a consonant was written, inherent 'a' not decided yet
         int n = w.length();
@@ -158,8 +158,8 @@ public final class TextProc {
             String cons = devaConsonant(c);
             if (cons != null) {
                 if (pend) sb.append('a');
-                if (i + 1 < n && w.charAt(i + 1) == '़') { // nukta
-                    if (c == 'ड' || c == 'ढ') cons = "d";
+                if (i + 1 < n && w.charAt(i + 1) == '\u093c') { // nukta
+                    if (c == '\u0921' || c == '\u0922') cons = "d";
                     i++;
                 }
                 sb.append(cons);
@@ -168,13 +168,13 @@ public final class TextProc {
             }
             String m = devaMatra(c);
             if (m != null) { sb.append(m); pend = false; continue; }
-            if (c == '्') { pend = false; continue; }          // virama
-            if (c == '़' || c == '‌' || c == '‍' || c == 'ऽ') continue;
+            if (c == '\u094d') { pend = false; continue; }          // virama
+            if (c == '\u093c' || c == '\u200c' || c == '\u200d' || c == '\u093d') continue;
             String v = devaIndependentVowel(c);
             if (v != null) { if (pend) sb.append('a'); sb.append(v); pend = false; continue; }
-            if (c == 'ँ' || c == 'ं') { if (pend) sb.append('a'); pend = false; sb.append('n'); continue; }
-            if (c == 'ः') { if (pend) sb.append('a'); pend = false; sb.append('h'); continue; }
-            if (c >= '०' && c <= '९') { if (pend) sb.append('a'); pend = false; sb.append((char) ('0' + (c - '०'))); continue; }
+            if (c == '\u0901' || c == '\u0902') { if (pend) sb.append('a'); pend = false; sb.append('n'); continue; }
+            if (c == '\u0903') { if (pend) sb.append('a'); pend = false; sb.append('h'); continue; }
+            if (c >= '\u0966' && c <= '\u096f') { if (pend) sb.append('a'); pend = false; sb.append((char) ('0' + (c - '\u0966'))); continue; }
             if (pend) sb.append('a');
             pend = false;
             sb.append(c);

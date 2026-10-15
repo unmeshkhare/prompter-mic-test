@@ -1,3 +1,11 @@
+import java.io.BufferedInputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.UUID
+import java.util.zip.ZipInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -43,12 +51,12 @@ val fetchHindiModel = tasks.register("fetchHindiModel") {
             try {
                 hindiModelDir.deleteRecursively()
                 hindiModelDir.mkdirs()
-                val conn = java.net.URL("https://alphacephei.com/vosk/models/vosk-model-small-hi-0.22.zip")
-                    .openConnection() as java.net.HttpURLConnection
+                val conn = URL("https://alphacephei.com/vosk/models/vosk-model-small-hi-0.22.zip")
+                    .openConnection() as HttpURLConnection
                 conn.instanceFollowRedirects = true
                 conn.connectTimeout = 30000
                 conn.readTimeout = 120000
-                val zin = java.util.zip.ZipInputStream(java.io.BufferedInputStream(conn.inputStream))
+                val zin = ZipInputStream(BufferedInputStream(conn.inputStream))
                 try {
                     var entry = zin.nextEntry
                     while (entry != null) {
@@ -59,7 +67,7 @@ val fetchHindiModel = tasks.register("fetchHindiModel") {
                                 target.mkdirs()
                             } else {
                                 target.parentFile.mkdirs()
-                                val os = java.io.FileOutputStream(target)
+                                val os = FileOutputStream(target)
                                 try {
                                     zin.copyTo(os)
                                 } finally {
@@ -73,7 +81,7 @@ val fetchHindiModel = tasks.register("fetchHindiModel") {
                     zin.close()
                 }
                 if (File(hindiModelDir, "am").exists()) {
-                    marker.writeText(java.util.UUID.randomUUID().toString())
+                    marker.writeText(UUID.randomUUID().toString())
                 } else {
                     println("WARNING: Hindi model download looks incomplete, Hindi will not work in this build")
                     hindiModelDir.deleteRecursively()
