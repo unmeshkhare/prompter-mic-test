@@ -33,39 +33,55 @@ dependencies {
     implementation("com.alphacephei:vosk-android:0.3.47")
 }
 
-// Hindi speech model (Vosk small Hindi, ~40 MB). Downloaded while building, so nothing else needs to be uploaded.
+// Hindi speech model (Vosk small Hindi, ~40 MB), downloaded while building so nothing else needs uploading.
+// If the download fails the build still succeeds (English keeps working; only Hindi would be unavailable).
 val hindiModelDir = file("src/main/assets/model-hi")
 val fetchHindiModel = tasks.register("fetchHindiModel") {
-    outputs.dir(hindiModelDir)
     doLast {
-        if (!File(hindiModelDir, "uuid").exists()) {
-            hindiModelDir.deleteRecursively()
-            hindiModelDir.mkdirs()
-            val conn = java.net.URL("https://alphacephei.com/vosk/models/vosk-model-small-hi-0.22.zip")
-                .openConnection() as java.net.HttpURLConnection
-            conn.instanceFollowRedirects = true
-            conn.connectTimeout = 30000
-            conn.readTimeout = 120000
-            java.util.zip.ZipInputStream(conn.inputStream.buffered()).use { zin ->
-                var e = zin.nextEntry
-                while (e != null) {
-                    val name = e.name.substringAfter('/')
-                    if (name.isNotEmpty() && !name.contains("..")) {
-                        val f = File(hindiModelDir, name)
-                        if (e.isDirectory) {
-                            f.mkdirs()
-                        } else {
-                            f.parentFile.mkdirs()
-                            f.outputStream().use { out -> zin.copyTo(out) }
+        val marker = File(hindiModelDir, "uuid")
+        if (!marker.exists()) {
+            try {
+                hindiModelDir.deleteRecursively()
+                hindiModelDir.mkdirs()
+                val conn = java.net.URL("https://alphacephei.com/vosk/models/vosk-model-small-hi-0.22.zip")
+                    .openConnection() as java.net.HttpURLConnection
+                conn.instanceFollowRedirects = true
+                conn.connectTimeout = 30000
+                conn.readTimeout = 120000
+                val zin = java.util.zip.ZipInputStream(java.io.BufferedInputStream(conn.inputStream))
+                try {
+                    var entry = zin.nextEntry
+                    while (entry != null) {
+                        val rel = entry.name.substringAfter('/')
+                        if (rel.isNotEmpty() && !rel.contains("..")) {
+                            val target = File(hindiModelDir, rel)
+                            if (entry.isDirectory) {
+                                target.mkdirs()
+                            } else {
+                                target.parentFile.mkdirs()
+                                val os = java.io.FileOutputStream(target)
+                                try {
+                                    zin.copyTo(os)
+                                } finally {
+                                    os.close()
+                                }
+                            }
                         }
+                        entry = zin.nextEntry
                     }
-                    e = zin.nextEntry
+                } finally {
+                    zin.close()
                 }
+                if (File(hindiModelDir, "am").exists()) {
+                    marker.writeText(java.util.UUID.randomUUID().toString())
+                } else {
+                    println("WARNING: Hindi model download looks incomplete, Hindi will not work in this build")
+                    hindiModelDir.deleteRecursively()
+                }
+            } catch (ex: Exception) {
+                println("WARNING: could not download the Hindi model: " + ex)
+                hindiModelDir.deleteRecursively()
             }
-            if (!File(hindiModelDir, "am").exists()) {
-                throw GradleException("Hindi model download looks incomplete")
-            }
-            File(hindiModelDir, "uuid").writeText(java.util.UUID.randomUUID().toString())
         }
     }
 }
