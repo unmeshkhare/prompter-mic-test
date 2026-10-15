@@ -15,7 +15,7 @@ public final class TextProc {
     private TextProc() {}
 
     public static final Pattern WORD_RE =
-            Pattern.compile("[\\p{L}\\p{N}_](?:[\\p{L}\\p{N}_'\u2019]*[\\p{L}\\p{N}_])?");
+            Pattern.compile("[\\p{L}\\p{N}_](?:[\\p{L}\\p{M}\\p{N}_'\u2019\u200c\u200d]*[\\p{L}\\p{M}\\p{N}_])?");
     private static final Pattern NONWORD = Pattern.compile("[^\\p{L}\\p{N}]+");
     private static final Pattern COMBINING = Pattern.compile("\\p{M}+");
     private static final Pattern REPEATS = Pattern.compile("(.)\\1+");
@@ -88,6 +88,146 @@ public final class TextProc {
         while (m.find()) {
             String t = norm(m.group());
             if (!t.isEmpty() && !FILLERS.contains(t)) out.add(t);
+        }
+        return out;
+    }
+
+    // ------------------------------------------------------------------ Hindi / Hinglish
+
+    private static final Set<String> FILLERS_HI = new HashSet<>(Arrays.asList(
+            "हम्म", "उम्म", "अह", "आह"));
+
+    private static String devaConsonant(char c) {
+        switch (c) {
+            case 'क': return "k";   case 'ख': return "kh";  case 'ग': return "g";
+            case 'घ': return "gh";  case 'ङ': return "n";   case 'च': return "ch";
+            case 'छ': return "chh"; case 'ज': return "j";   case 'झ': return "jh";
+            case 'ञ': return "n";   case 'ट': return "t";   case 'ठ': return "th";
+            case 'ड': return "d";   case 'ढ': return "dh";  case 'ण': return "n";
+            case 'त': return "t";   case 'थ': return "th";  case 'द': return "d";
+            case 'ध': return "dh";  case 'न': return "n";   case 'प': return "p";
+            case 'फ': return "ph";  case 'ब': return "b";   case 'भ': return "bh";
+            case 'म': return "m";   case 'य': return "y";   case 'र': return "r";
+            case 'ल': return "l";   case 'ळ': return "l";   case 'व': return "v";
+            case 'श': return "sh";  case 'ष': return "sh";  case 'स': return "s";
+            case 'ह': return "h";
+            // precomposed nukta letters
+            case 'क़': return "k";   case 'ख़': return "kh";  case 'ग़': return "g";
+            case 'ज़': return "j";   case 'ड़': return "d";   case 'ढ़': return "d";
+            case 'फ़': return "ph";  case 'य़': return "y";
+            default: return null;
+        }
+    }
+
+    private static String devaIndependentVowel(char c) {
+        switch (c) {
+            case 'ऄ': case 'अ': return "a";
+            case 'आ': return "aa";
+            case 'इ': return "i";   case 'ई': return "ii";
+            case 'उ': return "u";   case 'ऊ': return "uu";
+            case 'ऋ': return "ri";
+            case 'ऍ': case 'ऎ': case 'ए': return "e";
+            case 'ऐ': return "ai";
+            case 'ऑ': case 'ऒ': case 'ओ': return "o";
+            case 'औ': return "au";
+            default: return null;
+        }
+    }
+
+    private static String devaMatra(char c) {
+        switch (c) {
+            case 'ा': return "a";   case 'ि': case 'ी': return "i";
+            case 'ु': case 'ू': return "u";
+            case 'ृ': case 'ॄ': return "ri";
+            case 'ॅ': case 'ॆ': case 'े': return "e";
+            case 'ै': return "ai";
+            case 'ॉ': case 'ॊ': case 'ो': return "o";
+            case 'ौ': return "au";
+            default: return null;
+        }
+    }
+
+    /** Devanagari -> rough Roman letters (other characters pass through). Word-final schwa is dropped. */
+    static String devaToRoman(String w) {
+        w = w.replace("ज्ञ", "gy");
+        StringBuilder sb = new StringBuilder();
+        boolean pend = false; // a consonant was written, inherent 'a' not decided yet
+        int n = w.length();
+        for (int i = 0; i < n; i++) {
+            char c = w.charAt(i);
+            String cons = devaConsonant(c);
+            if (cons != null) {
+                if (pend) sb.append('a');
+                if (i + 1 < n && w.charAt(i + 1) == '़') { // nukta
+                    if (c == 'ड' || c == 'ढ') cons = "d";
+                    i++;
+                }
+                sb.append(cons);
+                pend = true;
+                continue;
+            }
+            String m = devaMatra(c);
+            if (m != null) { sb.append(m); pend = false; continue; }
+            if (c == '्') { pend = false; continue; }          // virama
+            if (c == '़' || c == '‌' || c == '‍' || c == 'ऽ') continue;
+            String v = devaIndependentVowel(c);
+            if (v != null) { if (pend) sb.append('a'); sb.append(v); pend = false; continue; }
+            if (c == 'ँ' || c == 'ं') { if (pend) sb.append('a'); pend = false; sb.append('n'); continue; }
+            if (c == 'ः') { if (pend) sb.append('a'); pend = false; sb.append('h'); continue; }
+            if (c >= '०' && c <= '९') { if (pend) sb.append('a'); pend = false; sb.append((char) ('0' + (c - '०'))); continue; }
+            if (pend) sb.append('a');
+            pend = false;
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    private static boolean isRomanVowel(char c) {
+        return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u';
+    }
+
+    /**
+     * Sound key shared by Roman Hindi ("kya", "kyaa", "kia"), Devanagari and English words:
+     * a consonant skeleton (vowels dropped, aspirates and look-alikes merged, word-final nasal dropped).
+     */
+    static String romanKey(String s) {
+        s = norm(s);
+        if (s.isEmpty()) return s;
+        s = s.replace("chh", "C").replace("ch", "C").replace("sh", "s").replace("ph", "p")
+                .replace("th", "t").replace("dh", "d").replace("bh", "b").replace("gh", "g")
+                .replace("kh", "k").replace("jh", "j").replace("ck", "k").replace("x", "ks")
+                .replace("q", "k").replace("w", "v").replace("z", "j").replace("f", "p")
+                .replaceAll("c(?=[eiy])", "s").replace("c", "k").replace("C", "c");
+        int len = s.length();
+        if (len >= 2 && (s.charAt(len - 1) == 'n' || s.charAt(len - 1) == 'm') && isRomanVowel(s.charAt(len - 2))) {
+            s = s.substring(0, len - 1);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (isRomanVowel(c)) { if (i == 0) sb.append('a'); continue; }
+            if (c == 'y' && i > 0) continue;
+            sb.append(c);
+        }
+        String r = REPEATS.matcher(sb.toString()).replaceAll("$1");
+        return r.isEmpty() ? s : r;
+    }
+
+    /** Key for one word, whether it is written in Devanagari or in Roman letters. */
+    public static String hiKey(String word) {
+        String w = Normalizer.normalize(word, Normalizer.Form.NFC);
+        return romanKey(devaToRoman(w));
+    }
+
+    /** Spoken Hindi text (Devanagari from the recogniser) -> sound keys. */
+    public static List<String> tokenizeHi(String text) {
+        List<String> out = new ArrayList<>();
+        Matcher m = WORD_RE.matcher(text);
+        while (m.find()) {
+            String raw = m.group();
+            if (FILLERS_HI.contains(raw) || FILLERS.contains(raw.toLowerCase())) continue;
+            String k = hiKey(raw);
+            if (!k.isEmpty()) out.add(k);
         }
         return out;
     }

@@ -29,10 +29,17 @@ public final class Aligner {
     private int pendingE = 0;
     private int pendingCnt = 0;
     private int miss = 0;
+    private final boolean hindi;
 
-    public Aligner(List<String> norms) { this(norms, 90, 30, 2); }
+    public Aligner(List<String> norms) { this(norms, 90, 30, 2, false); }
 
-    public Aligner(List<String> norms, int back, int ahead, int confirm) {
+    /** hindi = true: sound keys are short, so far-away matches made only of tiny words are distrusted. */
+    public Aligner(List<String> norms, boolean hindi) { this(norms, 90, 30, 2, hindi); }
+
+    public Aligner(List<String> norms, int back, int ahead, int confirm) { this(norms, back, ahead, confirm, false); }
+
+    public Aligner(List<String> norms, int back, int ahead, int confirm, boolean hindi) {
+        this.hindi = hindi;
         this.w = norms;
         this.n = norms.size();
         this.back = back;
@@ -53,13 +60,17 @@ public final class Aligner {
         int s0 = e - L + 1;
         if (s0 < 0 || e >= n) return -1.0;
         double tot = 0, wt = 0;
+        int info = 0;
         for (int k = 0; k < L; k++) {
             String sw = w.get(s0 + k);
             double weight = sw.length() <= 2 ? 0.5 : 1.0;
             tot += weight * TextProc.wordSim(sub.get(k), sw);
             wt += weight;
+            info += sw.length();
         }
-        return tot / wt;
+        double sc = tot / wt;
+        if (hindi && info < 7 && Math.abs(e - (pos - 1)) > 5) sc *= 0.75;
+        return sc;
     }
 
     /** returns {score, e} or null */

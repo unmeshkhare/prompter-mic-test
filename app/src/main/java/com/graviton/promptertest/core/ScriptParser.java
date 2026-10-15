@@ -102,7 +102,10 @@ public final class ScriptParser {
         return Normalizer.normalize(sb.toString(), Normalizer.Form.NFC);
     }
 
-    public static Parsed parse(String raw) {
+    public static Parsed parse(String raw) { return parse(raw, false); }
+
+    /** hindi = true: word.norm is the Hindi/Hinglish sound key (works for Roman and Devanagari text). */
+    public static Parsed parse(String raw, boolean hindi) {
         String text = cleanText(raw);
         Parsed ps = new Parsed();
         ps.text = text;
@@ -133,7 +136,7 @@ public final class ScriptParser {
             }
             int j = m.end();
             while (j < text.length() && TRAIL_PUNCT.indexOf(text.charAt(j)) >= 0 && text.charAt(j) != '[') j++;
-            ps.words.add(new Word(m.group(), TextProc.norm(m.group()), m.start(), m.end(), j, sent, para));
+            ps.words.add(new Word(m.group(), hindi ? TextProc.hiKey(m.group()) : TextProc.norm(m.group()), m.start(), m.end(), j, sent, para));
             ps.sentLast.set(sent, ps.words.size() - 1);
             prevEnd = m.end();
         }

@@ -134,7 +134,7 @@ class MainActivity : Activity() {
         content.addView(label("Your scripts", 18f, true))
         val scripts = store.list()
         if (scripts.isEmpty()) {
-            content.addView(label("None yet. Tap New script (paste your text) or Import file (.txt or .docx).", 14f, false, Color.rgb(90, 95, 110)))
+            content.addView(label("None yet. Tap New script (paste your text) or Import file (.txt or .docx). In the editor you can choose English or Hindi / Hinglish.", 14f, false, Color.rgb(90, 95, 110)))
         }
         for (s in scripts) addScriptRow(s)
     }
@@ -207,7 +207,7 @@ class MainActivity : Activity() {
         box.setPadding(0, dp(10), 0, dp(6))
         val words = s.text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.size
         box.addView(label(s.title.ifBlank { "Untitled" }, 16f, true))
-        box.addView(label("$words words", 12f, false, Color.rgb(110, 115, 130)))
+        box.addView(label("$words words  -  " + (if (s.isHindi) "Hindi / Hinglish" else "English"), 12f, false, Color.rgb(110, 115, 130)))
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
                 row.addView(button("Prompt") { Launcher.startPrompter(this, s.id) }, weight())
@@ -251,8 +251,9 @@ class MainActivity : Activity() {
             return
         }
         val doc = ScriptDoc(store.newId(), r.first, r.second, 0L)
+        doc.lang = ScriptDoc.guessLang(r.second)
         store.save(doc)
-        Toast.makeText(this, "Imported: ${r.first}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Imported: ${r.first}" + (if (doc.isHindi) " (Hindi)" else ""), Toast.LENGTH_SHORT).show()
         refresh()
     }
 }

@@ -11,6 +11,8 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.Toast
 
 class EditorActivity : Activity() {
@@ -23,6 +25,8 @@ class EditorActivity : Activity() {
     private lateinit var etTitle: EditText
     private lateinit var etBody: EditText
     private var doc: ScriptDoc? = null
+    private lateinit var rbEn: RadioButton
+    private lateinit var rbHi: RadioButton
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -51,6 +55,19 @@ class EditorActivity : Activity() {
         etTitle.setSingleLine(true)
         etTitle.setText(doc?.title ?: "")
         col.addView(etTitle)
+
+        val langRow = RadioGroup(this)
+        langRow.orientation = RadioGroup.HORIZONTAL
+        rbEn = RadioButton(this)
+        rbEn.text = "English"
+        rbEn.id = 101
+        rbHi = RadioButton(this)
+        rbHi.text = "Hindi / Hinglish"
+        rbHi.id = 102
+        langRow.addView(rbEn)
+        langRow.addView(rbHi)
+        langRow.check(if (doc?.isHindi == true) 102 else 101)
+        col.addView(langRow)
 
         etBody = EditText(this)
         etBody.hint = "Paste or type your script here.\n\nTip: [text in square brackets] and lines starting with // are shown dimly and never need to be spoken."
@@ -83,6 +100,7 @@ class EditorActivity : Activity() {
         val start = etBody.selectionStart.coerceAtLeast(0)
         val end = etBody.selectionEnd.coerceAtLeast(0)
         etBody.text.replace(minOf(start, end), maxOf(start, end), t)
+        if (ScriptDoc.guessLang(etBody.text.toString()) == "hi") rbHi.isChecked = true
     }
 
     private fun saveDoc(): ScriptDoc? {
@@ -96,6 +114,7 @@ class EditorActivity : Activity() {
         val d = doc ?: ScriptDoc(store.newId(), title, body, 0L)
         d.title = title
         d.text = body
+        d.lang = if (rbHi.isChecked) "hi" else "en"
         store.save(d)
         doc = d
         return d

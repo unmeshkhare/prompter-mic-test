@@ -63,6 +63,7 @@ class OverlayService : Service() {
 
     private var parsed: ScriptParser.Parsed? = null
     @Volatile private var aligner: Aligner? = null
+    @Volatile private var hindi = false
     private var following = false
 
     // curPos = what the highlight shows; alignPos = what the matcher believes; curPos = alignPos + lead
@@ -130,7 +131,6 @@ class OverlayService : Service() {
         lead = prefs.lead
         buildUi()
         engine = VoiceEngine(this) { text -> onHeard(text) }
-        engine.loadModel()
         prefs.sp.registerOnSharedPreferenceChangeListener(prefListener)
         applyPrefs()
         main.post(statusTick)
@@ -449,9 +449,11 @@ class OverlayService : Service() {
     private fun loadScript(id: String) {
         val doc = store.get(id) ?: return
         if (following) setFollowing(false)
-        val ps = ScriptParser.parse(doc.text)
+        hindi = doc.isHindi
+        engine.ensureLanguage(doc.lang)
+        val ps = ScriptParser.parse(doc.text, hindi)
         parsed = ps
-        aligner = Aligner(ps.norms())
+        aligner = Aligner(ps.norms(), hindi)
         curPos = 0
         lastAlignedPos = 0
         view.setScript(ps)
@@ -483,7 +485,7 @@ class OverlayService : Service() {
                 Toast.makeText(this, "Open a script first", Toast.LENGTH_SHORT).show()
                 return
             }
-            val grammar: List<String>? = if (prefs.scriptAware) {
+            val grammar: List<String>? = if (prefs.scriptAware && !hindi) {
                 val set = LinkedHashSet<String>()
                 for (w in ps.words) {
                     val n = w.norm
@@ -510,7 +512,7 @@ class OverlayService : Service() {
     /** Called on the audio thread with the words heard in the current phrase. */
     private fun onHeard(text: String) {
         if (!following) return
-        val tokens = TextProc.tokenize(text).filter { it != "unk" }
+        val tokens = if (hindi) TextProc.tokenizeHi(text) else TextProc.tokenize(text).filter { it != "unk" }
         if (tokens.isEmpty()) return
         alignExec.execute {
             val al = aligner ?: return@execute
@@ -538,7 +540,7 @@ class OverlayService : Service() {
             val color: Int
             when {
                 err != null -> { text = err; color = Color.rgb(255, 130, 130) }
-                engine.model == null -> { text = "Loading speech model..."; color = Color.rgb(210, 210, 210) }
+                engine.model == null -> { text = if (hindi) "Loading Hindi speech model (first time takes a few seconds)..." else "Loading speech model..."; color = Color.rgb(210, 210, 210) }
                 a11y == A11y.OFF -> {
                     text = "Accessibility is OFF. Tap here to fix."
                     color = Color.rgb(255, 170, 70)

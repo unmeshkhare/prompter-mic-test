@@ -25,6 +25,7 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
     }
 
     @Volatile var model: Model? = null
+    @Volatile var lang: String = ""
     @Volatile var loadError: String? = null
     @Volatile var audioError: String? = null
     @Volatile var rms = 0.0
@@ -38,17 +39,35 @@ class VoiceEngine(private val context: Context, private val onText: (String) -> 
 
     var onModelReady: (() -> Unit)? = null
 
-    fun loadModel() {
-        StorageService.unpack(
-            context, "model-en-us", "model",
-            { m: Model ->
-                model = m
-                onModelReady?.invoke()
-            },
-            { e: IOException ->
-                loadError = e.message ?: "could not load the speech model"
-            }
-        )
+    /** Makes sure the model for this language ("en" or "hi") is the one loaded (loads it if not). */
+    fun ensureLanguage(wanted: String) {
+        if (wanted == lang && (model != null || loadError == null)) return
+        stop()
+        val old = model
+        model = null
+        old?.close()
+        loadError = null
+        lang = wanted
+        val asset = if (wanted == "hi") "model-hi" else "model-en-us"
+        val target = if (wanted == "hi") "model-hi-dir" else "model"
+        try {
+            StorageService.unpack(
+                context, asset, target,
+                { m: Model ->
+                    if (wanted == lang) {
+                        model = m
+                        onModelReady?.invoke()
+                    } else {
+                        m.close()
+                    }
+                },
+                { e: IOException ->
+                    if (wanted == lang) loadError = e.message ?: "could not load the speech model"
+                }
+            )
+        } catch (e: Exception) {
+            loadError = e.message ?: "could not load the speech model"
+        }
     }
 
     fun stop() {
